@@ -12,8 +12,9 @@ spec:
       {{- include "otel-k8s-prometheus.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -53,11 +54,11 @@ spec:
           livenessProbe:
             httpGet:
               path: /
-              port: 13133 # Health Check extension default port.
+              port: 13133  # Health Check extension default port.
           readinessProbe:
             httpGet:
               path: /
-              port: 13133 # Health Check extension default port.
+              port: 13133  # Health Check extension default port.
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

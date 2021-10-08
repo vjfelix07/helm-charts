@@ -29,8 +29,8 @@ config:
     enabled: true
 
   # Add a clusterName label to metrics gathered from the cluster.
-  clusterNameProcessor:
-    enabled: true
+  nrConventionsProcessor:
+    enabled: false
 
   # Extra configs to use as processors for the otel collector.
   # By adding more processors here, metrics can be filtered or transformed with a high degree of flexibility:
@@ -48,7 +48,7 @@ config:
   # Configure the logging exporter.
   # See: https://github.com/open-telemetry/opentelemetry-collector/tree/main/exporter/loggingexporter
   loggingExporter:
-    enabled: true
+    enabled: false
     loglevel: info
 
   # Configure the OTLP exporter, which would typically hit an in-cluster gateway collector.

@@ -24,14 +24,14 @@ Return the name key for the License Key inside the secret
   regex: ".*true.*"
   separator: ";"
   action: keep
-# read the port from "prometheus.io/port: <port>" annotation and update scraping address accordingly
-# TODO: Do the same with /scheme and /path?
-- source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
-  action: replace
-  target_label: __address__
-  regex: ([^:]+)(?::\d+)?;(\d+)
-  # escaped $1:$2
-  replacement: $$1:$$2
+{{/*# read the port from "prometheus.io/port: <port>" annotation and update scraping address accordingly*/}}
+{{/*# TODO: Do the same with /scheme and /path?*/}}
+{{/*- source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]*/}}
+{{/*  action: replace*/}}
+{{/*  target_label: __address__*/}}
+{{/*  regex: ([^:]+)(?::\d+)?;(\d+)*/}}
+{{/*  # escaped $1:$2*/}}
+{{/*  replacement: $$1:$$2*/}}
 
 # Keep meta labels regarding k8s objects
 - source_labels: [__meta_kubernetes_namespace]
@@ -45,6 +45,10 @@ Return the name key for the License Key inside the secret
 - source_labels: [__meta_kubernetes_pod_container_name]
   action: replace
   target_label: kubernetes_pod_container_name
+
+- source_labels: [__meta_kubernetes_pod_node_name]
+  action: replace
+  target_label: kubernetes_pod_node_name
 
 - source_labels: [__meta_kubernetes_service_name]
   action: replace

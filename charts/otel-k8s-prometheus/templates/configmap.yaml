@@ -12,10 +12,6 @@ data:
       prometheus:
         config:
           scrape_configs:
-          {{- with .extraScrapeConfigs }}
-          {{- . | toYaml | nindent 12 }}
-          {{- end }}
-
           {{- with .jobs.podsEndpoints }}
           {{- if .enabled }}
             - job_name: {{ include "otel-k8s-prometheus.name" $ | replace "-" "_" }}_pods_endpoints
@@ -26,6 +22,7 @@ data:
                 # And also pods that are annotated directly and are not behind a service
                 - role: pod
               relabel_configs:
+                # K8s scrape labels and transformations
                 {{- include "newrelic.prometheusOtelRelabel" $.Values.config | nindent 16 }}
           {{- end }}
           {{- end }}
@@ -37,34 +34,57 @@ data:
               kubernetes_sd_configs:
                 - role: service
               relabel_configs:
+                # Drop targets that are not services with an externalName
+                - source_labels:
+                  - __meta_kubernetes_service_external_name
+                  regex: ".+"
+                  action: keep
+                # K8s scrape labels and transformations
                 {{- include "newrelic.prometheusOtelRelabel" $.Values.config | nindent 16 }}
           {{- end }}
+          {{- end }}
+
+          {{- with .extraScrapeConfigs }}
+          {{- . | toYaml | nindent 12 }}
           {{- end }}
 
     processors:
     {{- if .batchProcessor.enabled }}
       batch: {}
     {{- end }}
-    {{- if .clusterNameProcessor.enabled }}
-      metricstransform/addClusterLabel:
+    {{- if .nrConventionsProcessor.enabled }}
+      metricstransform/nrConventions:
         transforms:
           - include: ".*"
             match_type: regexp
             action: update
             operations:
               - action: add_label
-                new_label: cluster.name
+                new_label: k8s.cluster.name
                 new_value: ${NR_CLUSTER_NAME}
-    {{- end }}
-      metricstransform/removeServiceName:
-        transforms:
-          - include: ".*"
-            match_type: regexp
-            action: update
-            operations:
+
+              # TODO: This one is not working, unsure why
               - action: update_label
                 label: service.name
                 new_label: otelmeta.service.name
+
+              # K8s labels
+              - action: update_label
+                label: kubernetes_pod_name
+                new_label: k8s.pod.name
+              - action: update_label
+                label: kubernetes_namespace
+                new_label: k8s.namespace
+              - action: update_label
+                label: kubernetes_pod_container_name
+                new_label: k8s.pod.container.name
+              - action: update_label
+                label: kubernetes_pod_node_name
+                new_label: k8s.pod.node.name
+              - action: update_label
+                label: kubernetes_service_name
+                new_label: k8s.service.name
+    {{- end }}
     {{- with .extraProcessors }}
       {{- . | toYaml | nindent 6 }}
     {{- end }}
@@ -73,13 +93,13 @@ data:
       {{- with .otlpExporter }}
       {{- if .enabled }}
       otlp:
-        {{- unset . "enabled" | toYaml | nindent 8 }}
+        {{- omit . "enabled" | toYaml | nindent 8 }}
       {{- end }}
       {{- end }}
       {{- with .loggingExporter }}
       {{- if .enabled }}
       logging:
-        {{- unset . "enabled" | toYaml | nindent 8 }}
+        {{- omit . "enabled" | toYaml | nindent 8 }}
       {{- end }}
       {{- end }}
       {{- with $.Values.service.prometheusDebug }}
@@ -106,10 +126,9 @@ data:
             {{- if .batchProcessor.enabled }}
             - batch
             {{- end }}
-            {{- if .clusterNameProcessor.enabled }}
-            - metricstransform/addClusterLabel
+            {{- if .nrConventionsProcessor.enabled }}
+            - metricstransform/nrConventions
             {{- end }}
-            - metricstransform/removeServiceName
             {{- range $processor, $_ := .extraProcessors }}
             - {{ $processor }}
             {{- end }}
