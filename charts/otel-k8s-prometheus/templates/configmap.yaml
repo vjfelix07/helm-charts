@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "otel-k8s-prometheus.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "otel-k8s-prometheus.labels" . | nindent 4 }}
+data:
+  otel-prometheus-config.yaml: |
+  {{- with .Values.config }}
+    receivers:
+      prometheus:
+        config:
+          scrape_configs:
+          {{- with .extraScrapeConfigs }}
+          {{- . | toYaml | nindent 12 }}
+          {{- end }}
+
+          {{- with .jobs.podsEndpoints }}
+          {{- if .enabled }}
+            - job_name: {{ include "otel-k8s-prometheus.name" $ | replace "-" "_" }}_pods_endpoints
+              scrape_interval: {{ $.Values.config.interval }}
+              kubernetes_sd_configs:
+                # Attempt to scrape endpoints (pods behind annotated services)
+                - role: endpoints
+                # And also pods that are annotated directly and are not behind a service
+                - role: pod
+              relabel_configs:
+                {{- include "newrelic.prometheusOtelRelabel" $.Values.config | nindent 16 }}
+          {{- end }}
+          {{- end }}
+
+          {{- with .jobs.headless }}
+          {{- if .enabled }}
+            - job_name: {{ include "otel-k8s-prometheus.name" $ | replace "-" "_" }}_headless
+              scrape_interval: {{ $.Values.config.interval }}
+              kubernetes_sd_configs:
+                - role: service
+              relabel_configs:
+                {{- include "newrelic.prometheusOtelRelabel" $.Values.config | nindent 16 }}
+          {{- end }}
+          {{- end }}
+
+    processors:
+    {{- if .batchProcessor.enabled }}
+      batch: {}
+    {{- end }}
+    {{- if .clusterNameProcessor.enabled }}
+      metricstransform/addClusterLabel:
+        transforms:
+          - include: ".*"
+            match_type: regexp
+            action: update
+            operations:
+              - action: add_label
+                new_label: cluster.name
+                new_value: ${NR_CLUSTER_NAME}
+    {{- end }}
+      metricstransform/removeServiceName:
+        transforms:
+          - include: ".*"
+            match_type: regexp
+            action: update
+            operations:
+              - action: update_label
+                label: service.name
+                new_label: otelmeta.service.name
+    {{- with .extraProcessors }}
+      {{- . | toYaml | nindent 6 }}
+    {{- end }}
+
+    exporters:
+      {{- with .otlpExporter }}
+      {{- if .enabled }}
+      otlp:
+        {{- unset . "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      {{- with .loggingExporter }}
+      {{- if .enabled }}
+      logging:
+        {{- unset . "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      {{- with $.Values.service.prometheusDebug }}
+      {{- if .enabled }}
+      prometheus:
+        endpoint: ":9000"
+        resource_to_telemetry_conversion:
+          enabled: true
+      {{- end }}
+      {{- end }}
+      {{- with .extraExporters }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
+
+    extensions:
+      health_check:
+
+    service:
+      extensions: [ health_check ]
+      pipelines:
+        metrics:
+          receivers: [ prometheus ]
+          processors:
+            {{- if .batchProcessor.enabled }}
+            - batch
+            {{- end }}
+            {{- if .clusterNameProcessor.enabled }}
+            - metricstransform/addClusterLabel
+            {{- end }}
+            - metricstransform/removeServiceName
+            {{- range $processor, $_ := .extraProcessors }}
+            - {{ $processor }}
+            {{- end }}
+          exporters:
+            {{- if .otlpExporter.enabled }}
+            - otlp
+            {{- end }}
+            {{- if .loggingExporter.enabled }}
+            - logging
+            {{- end }}
+            {{- if $.Values.service.prometheusDebug.enabled }}
+            - prometheus
+            {{- end }}
+            {{- range $exporter, $_ := .extraExporters }}
+            - {{ $exporter }}
+            {{- end }}
+  {{- end }}
