@@ -37,6 +37,14 @@ pixie-chart:
 # enables newrelic-infra-operator
 newrelic-infra-operator:
   enabled: false
+  
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 250m
+    memory: 64Mi
 
 # IMPORTANT: the following values are set as global so that they
 # can be shared by other newrelic product's charts
